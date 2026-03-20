@@ -68,7 +68,7 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: "http://localhost:3010",
+        target: "http://20.197.33.76",
         changeOrigin: true,
       },
     },
@@ -79,7 +79,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://localhost:3010",
+        target: "http://20.197.33.76",
         changeOrigin: true,
       },
     },

@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { usersTable, classesTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, or, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -11,7 +11,10 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "bad_request", message: "Username and password required" });
   }
 
-  const users = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+  // Allow login with either username or email
+  const users = await db.select().from(usersTable)
+    .where(or(eq(usersTable.username, username), eq(usersTable.email, username)))
+    .limit(1);
   const user = users[0];
 
   if (!user || user.password !== password) {

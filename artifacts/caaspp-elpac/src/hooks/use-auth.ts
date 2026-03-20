@@ -1,58 +1,98 @@
 import { useState, useEffect, useCallback } from "react";
-import { User, LoginRequest } from "@workspace/api-client-react";
-
-// Mocking actual API calls with local state for the POC to ensure reliability 
-// even if backend endpoints aren't fully wired up yet.
-const MOCK_USERS: Record<string, User> = {
-  "student1": { id: "u1", username: "student1", name: "Alex Student", email: "alex@school.edu", role: "student", grade: "8", classIds: ["c1"], createdAt: new Date().toISOString() },
-  "teacher1": { id: "u2", username: "teacher1", name: "Sarah Jenkins", email: "sarah.j@school.edu", role: "teacher", createdAt: new Date().toISOString() },
-  "admin1": { id: "u3", username: "admin1", name: "Dr. Admin", email: "admin@school.edu", role: "admin", createdAt: new Date().toISOString() }
-};
+import { 
+  User, 
+  LoginRequest, 
+  useLogin, 
+  useLogout, 
+  useGetCurrentUser,
+  getGetCurrentUserQueryKey
+} from "@workspace/api-client-react";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Use the generated query hook to fetch the current user
+  const { 
+    data: currentUser, 
+    isLoading: isMeLoading, 
+    refetch 
+  } = useGetCurrentUser({
+    query: {
+      queryKey: getGetCurrentUserQueryKey(),
+      enabled: !!localStorage.getItem("caaspp_token"),
+      retry: false,
+    }
+  });
+
+  const loginMutation = useLogin();
+  const logoutMutation = useLogout();
+
   useEffect(() => {
-    const storedUser = localStorage.getItem("caaspp_user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse stored user", e);
+    if (currentUser) {
+      setUser(currentUser);
+      localStorage.setItem("caaspp_user", JSON.stringify(currentUser));
+    } else if (!isMeLoading) {
+      // If we're not loading and have no user, check localStorage for a cached user
+      // for a snappier UI transitions, but fall back to null if no token exists
+      const storedUser = localStorage.getItem("caaspp_user");
+      const hasToken = !!localStorage.getItem("caaspp_token");
+      
+      if (storedUser && hasToken) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
       }
     }
-    setIsLoading(false);
-  }, []);
+    
+    if (!isMeLoading) {
+      setIsLoading(false);
+    }
+  }, [currentUser, isMeLoading]);
 
   const login = useCallback(async (credentials: LoginRequest) => {
     setIsLoading(true);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const mockUser = MOCK_USERS[credentials.username];
-    if (mockUser && credentials.password === "demo123") {
-      localStorage.setItem("caaspp_user", JSON.stringify(mockUser));
-      setUser(mockUser);
+    try {
+      const response = await loginMutation.mutateAsync({ data: credentials });
+      
+      localStorage.setItem("caaspp_token", response.token);
+      localStorage.setItem("caaspp_user", JSON.stringify(response.user));
+      setUser(response.user);
+      
+      // Refetch the "me" query to sync state
+      await refetch();
+      
       setIsLoading(false);
-      return mockUser;
+      return response.user;
+    } catch (err) {
+      setIsLoading(false);
+      throw err;
     }
-    
-    setIsLoading(false);
-    throw new Error("Invalid username or password");
-  }, []);
+  }, [loginMutation, refetch]);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem("caaspp_user");
-    setUser(null);
-    window.location.href = "/";
-  }, []);
+  const logout = useCallback(async () => {
+    try {
+      await logoutMutation.mutateAsync();
+    } catch (e) {
+      console.error("Logout API call failed", e);
+    } finally {
+      localStorage.removeItem("caaspp_user");
+      localStorage.removeItem("caaspp_token");
+      setUser(null);
+      window.location.href = "/";
+    }
+  }, [logoutMutation]);
 
   return {
     user,
-    isLoading,
+    isLoading: isLoading || isMeLoading,
     login,
     logout,
-    isAuthenticated: !!user
+    isAuthenticated: !!user && !!localStorage.getItem("caaspp_token")
   };
 }
+
