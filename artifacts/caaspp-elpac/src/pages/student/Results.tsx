@@ -107,6 +107,12 @@ export default function StudentResults() {
                           <span>•</span>
                           <span>{result.completedAt ? format(new Date(result.completedAt), 'MMM d, yyyy') : 'N/A'}</span>
                         </div>
+                        {(result as any).feedback && (
+                          <div className="mt-3 p-3 bg-blue-50/50 rounded-lg text-sm text-blue-900/80 border border-blue-100">
+                            <strong>Rubric Feedback: </strong>
+                            {(result as any).feedback}
+                          </div>
+                        )}
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={`text-2xl font-bold font-display ${result.passed ? 'text-emerald-600' : 'text-red-500'}`}>
